@@ -39,5 +39,3 @@ while True:
 slave.close()
 
 
-
-

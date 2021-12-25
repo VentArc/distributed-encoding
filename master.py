@@ -1,6 +1,6 @@
 import os
 import socket
-
+MASTER_IP = "10.0.0.3"
 
 class Machine:
     def __init__(self, name):
@@ -8,8 +8,8 @@ class Machine:
         self.tunnel = socket.socket()
         self.alive = False
 
-    def connect(self, ip, port=34324):
-        self.tunnel.bind((ip,port))
+    def connect(self, port=34324):
+        self.tunnel.bind((MASTER_IP,port))
         self.tunnel.listen(1)
         self.tunnel,address = self.tunnel.accept()
         self.alive = True
@@ -30,6 +30,7 @@ class Machine:
 batchToRender = os.scandir()
 
 alpha = Machine("alpha")
+alpha.connect()
 alpha.send("echo helloworld!")
 alpha.recv()
 
