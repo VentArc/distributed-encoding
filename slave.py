@@ -35,7 +35,13 @@ while True:
         print("error")
     msglen = struct.unpack('>I', msglen)[0]
 
-    #Read the message
+    # Read message type
+    msgtype = recvall(slave, 4)
+    if not msgtype:
+        print("error")
+    msgtype = struct.unpack('>I', msgtype)[0]
+
+    # Read the message
     msg = recvall(slave, msglen)
 
     output  = "output:\n"
