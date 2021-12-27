@@ -4,6 +4,7 @@ import struct
 import enum
 import subprocess
 import math
+from typing import Counter
 MASTER_IP = "10.0.0.3"
 
 # Protocol:
@@ -11,30 +12,17 @@ MASTER_IP = "10.0.0.3"
 # uint32 := msgType
 # bytes  := msgContent
 
-# def binarySearch(a, b, function):
-#     print(a, b, function(a,b))
-#     if function(a, b) == 0:
-#         return a
-#     if function(a, b) == -1:
-#         return binarySearch(a, b/2, function)
-#     if function(a, b) == 1:
-#         return binarySearch((b/2)+a, b, function)
+def timeToSec(dateformat) -> float:
+    sec = float(dateformat[-5:])
+    min = int(dateformat[-8:-6]) * 60
+    hour = int(dateformat[:-9])  * 60 * 60
+    return sec + min + hour       
 
-# def betweenMinute(a, b):
-#     if b-a < 0.0001: # caso base epsilon
-#         return 0
-#     if a < 0.0000000001: a = 0.0000000001
-#     if b-a < 60:
-#         return -1
-#     else:
-#         return 1
-
-class TimeManager:
-    def __init__(self, dateformat) -> None:
-        sec = float(dateformat[-5:])
-        min = int(dateformat[-8:-6]) * 60
-        hour = int(dateformat[:-9])  * 60 * 60
-        self.sec = sec + min + hour       
+def secToTime(secs) -> str:
+    hour = int((secs // (60 * 60)) % (60 *60))
+    min  = int((secs // 60) % 60)
+    sec  = (secs % 60)
+    return f"{hour}:{min}:{sec:.3f}" 
 
 class MessageFormat(enum.Enum):
     command = 1
@@ -99,28 +87,71 @@ class Machine:
 
 class Video:
     def __init__(self, file) -> None:
+        
+        # file itself
         self.file = file
+        
+        # duration related info
+        print("Calculating Video Length...", end="\r")
         probe = subprocess.run(["ffprobe", file], capture_output=True).stderr.decode()
-        self.duration = TimeManager(probe[probe.find("Duration: ") + len("Duration: ") : probe.find("Duration: ") + len("Duration: ") + 11]).sec
+        self.duration = timeToSec(probe[probe.find("Duration: ") + len("Duration: ") : probe.find("Duration: ") + len("Duration: ") + 11])
         self.fps = int(probe[probe.find(" fps,")-3 : probe.find(" fps,")])
         self.clipTime = 2700 / self.fps
         self.numberClips = self.duration / self.clipTime
+        
+        # keyFrames calculation
+        comm = ("ffprobe -v error -skip_frame nokey -show_entries frame=pkt_pts_time -select_streams v -of csv=p=0").split()
+        comm.append(self.file)
+        print("Calculating KeyFrames...", end="\r")
+        keyFrames = subprocess.run(comm, capture_output=True).stdout
+        keyFrames = keyFrames.decode("utf-8")
+        keyFrames = keyFrames.split(sep="\n")
+        self.keyFrames = list(filter(None, keyFrames))
 
-    
+        # video splits
+        self.splits = []
+        indexCurrentKeyFrame = 0
+        print("Calculating Splits...", end="\r")
+        for split in range(math.ceil(self.numberClips)):
+            # Last KeyFrame base-case
+            if (self.keyFrames[indexCurrentKeyFrame] == self.keyFrames[-1]):
+                break
+            epsilon = ((1/self.fps)*1/10)
+            start = float(self.keyFrames[indexCurrentKeyFrame]) - epsilon
+            self.splits.append([str(start)])
+            indexOld = indexCurrentKeyFrame
 
-print(Video("Big Buck Bunny Demo.mp4").duration, Video("Big Buck Bunny Demo.mp4").clipTime, Video("Big Buck Bunny Demo.mp4").numberClips)
+            while not(float(self.keyFrames[indexCurrentKeyFrame]) > (float(self.keyFrames[indexOld]) + self.clipTime)):
+                # Last KeyFrame base-case
+                if (self.keyFrames[indexCurrentKeyFrame] == self.keyFrames[-1]):
+                    break
+                indexCurrentKeyFrame += 1
+            end = float(self.keyFrames[indexCurrentKeyFrame]) - epsilon
+            self.splits[split].append(str(end))
+
 v = Video("Big Buck Bunny Demo.mp4")
-for nclip in range(math.ceil(v.numberClips)):
-    if (v.clipTime * (nclip + 1)) > v.duration:
-        print(f"{v.clipTime * nclip} => {v.duration}")
-    else:
-        print(f"{v.clipTime * nclip} => {v.clipTime * (1 + nclip)}")        
+print(v.splits, v.keyFrames[-1])
+counter = 0
 
+for split in v.splits:
+    exe = subprocess.run(["ffmpeg", "-ss", split[0], "-i", "Big Buck Bunny Demo.mp4", "-to", split[1], "-c:v", "libx264", "-vf", "scale='min(1280,iw)':'min(720,ih)'", f"{counter}.mp4"])
+    print(exe)
+    counter += 1
+
+# for nclip in range(math.ceil(v.numberClips)):
+#     if (v.clipTime * (nclip + 1)) > v.duration:
+#         print(f"{v.clipTime * nclip} => {v.duration}")
+#         l = list(map(secToTime, [v.clipTime * nclip, v.duration]))
+#     else:
+#         print(f"{v.clipTime * nclip} => {v.clipTime * (1 + nclip)}")        
+#         l = list(map(secToTime, [v.clipTime * nclip, v.clipTime * (1 + nclip)]))
+    # exe = subprocess.run(["ffmpeg", "-i", "Big Buck Bunny Demo.mp4", "-ss", l[0], "-to", l[1], "-c", "copy", f"{counter}.mp4"])
+    # print(exe)
+    # counter += 1
 # print((Message(MessageFormat(1),"test")).format == MessageFormat.command)
 # print(MessageFormat(1).value)
 
 # batchToRender = os.scandir()
-
 # alpha = Machine("alpha")
 # alpha.connect()
 # alpha.send(Message(MessageFormat(1),bytes("echo helloworld!", 'utf-8')))
