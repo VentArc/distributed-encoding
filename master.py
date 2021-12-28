@@ -129,14 +129,18 @@ class Video:
             end = float(self.keyFrames[indexCurrentKeyFrame]) - epsilon
             self.splits[split].append(str(end))
 
+    def makeSplits(self):
+        counter = 0
+        # makes split in the current directory
+        for split in self.splits:
+            logs = subprocess.run(["ffmpeg", "-ss", split[0], "-i", "Big Buck Bunny Demo.mp4", "-to", split[1], "-c:v", "libx264", "-vf", "scale='min(1280,iw)':'min(720,ih)'", f"{counter}.mp4"], capture_output=True)
+            counter +=1
+
+
 v = Video("Big Buck Bunny Demo.mp4")
 print(v.splits, v.keyFrames[-1])
 counter = 0
 
-for split in v.splits:
-    exe = subprocess.run(["ffmpeg", "-ss", split[0], "-i", "Big Buck Bunny Demo.mp4", "-to", split[1], "-c:v", "libx264", "-vf", "scale='min(1280,iw)':'min(720,ih)'", f"{counter}.mp4"])
-    print(exe)
-    counter += 1
 
 # for nclip in range(math.ceil(v.numberClips)):
 #     if (v.clipTime * (nclip + 1)) > v.duration:
